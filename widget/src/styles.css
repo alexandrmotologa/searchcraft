@@ -312,3 +312,26 @@
   font-weight: 600;
   color: var(--sc-muted);
 }
+
+@media (max-width: 640px) {
+  .sc-overlay {
+    padding: 1rem 0.75rem 2rem;
+    align-items: flex-start;
+  }
+  .sc-modal {
+    max-height: 85vh;
+    border-radius: 12px;
+  }
+  .sc-search-bar {
+    padding: 0.75rem 0.875rem;
+  }
+  .sc-input {
+    font-size: 0.95rem;
+  }
+  .sc-result-item {
+    padding: 0.75rem 0.875rem;
+  }
+  .sc-footer-shortcuts {
+    display: none;
+  }
+}

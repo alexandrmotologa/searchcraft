@@ -7,6 +7,7 @@ import {
   Filter,
   Check,
   ChevronRight,
+  ChevronDown,
   Code,
   Layers,
   ArrowRight
@@ -35,6 +36,7 @@ export const SearchSandbox: React.FC<SearchSandboxProps> = ({
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [expandedJson, setExpandedJson] = useState<Record<string, boolean>>({});
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const runSearch = useCallback(async () => {
     if (!selectedIndex) return;
@@ -207,10 +209,20 @@ export const SearchSandbox: React.FC<SearchSandboxProps> = ({
         <div className="lg:col-span-1 space-y-4">
           <div className="bg-card border border-border rounded-2xl p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3 pb-2 border-b border-border">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-200">
+              <button
+                type="button"
+                onClick={() => setMobileFiltersOpen(!mobileFiltersOpen)}
+                className="flex items-center gap-2 text-sm font-semibold text-slate-200 cursor-pointer lg:cursor-default"
+              >
                 <Filter className="w-4 h-4 text-blue-400" />
                 <span>Facet Filters</span>
-              </div>
+                {Object.keys(selectedFilters).length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-blue-600/30 text-blue-300 text-[10px] font-mono border border-blue-500/30">
+                    {Object.keys(selectedFilters).length}
+                  </span>
+                )}
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 lg:hidden transition-transform duration-200 ${mobileFiltersOpen ? 'rotate-180' : ''}`} />
+              </button>
               {Object.keys(selectedFilters).length > 0 && (
                 <button
                   onClick={() => setSelectedFilters({})}
@@ -221,43 +233,45 @@ export const SearchSandbox: React.FC<SearchSandboxProps> = ({
               )}
             </div>
 
-            {Object.keys(facets).length === 0 ? (
-              <p className="text-xs text-slate-500 py-3 text-center">No facets for current search.</p>
-            ) : (
-              Object.entries(facets).map(([facetName, values]) => {
-                const entries = Object.entries(values);
-                if (entries.length === 0) return null;
+            <div className={`${mobileFiltersOpen ? 'block' : 'hidden'} lg:block`}>
+              {Object.keys(facets).length === 0 ? (
+                <p className="text-xs text-slate-500 py-3 text-center">No facets for current search.</p>
+              ) : (
+                Object.entries(facets).map(([facetName, values]) => {
+                  const entries = Object.entries(values);
+                  if (entries.length === 0) return null;
 
-                return (
-                  <div key={facetName} className="mb-4 last:mb-0">
-                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">
-                      {facetName}
-                    </span>
-                    <div className="space-y-1">
-                      {entries.map(([val, count]) => {
-                        const isSelected = selectedFilters[facetName] === val;
-                        return (
-                          <button
-                            key={val}
-                            onClick={() => toggleFilter(facetName, val)}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
-                              isSelected
-                                ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
-                                : 'text-slate-300 hover:bg-slate-800/60'
-                            }`}
-                          >
-                            <span className="truncate pr-2">{val}</span>
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400">
-                              {count}
-                            </span>
-                          </button>
-                        );
-                      })}
+                  return (
+                    <div key={facetName} className="mb-4 last:mb-0">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block mb-2">
+                        {facetName}
+                      </span>
+                      <div className="space-y-1">
+                        {entries.map(([val, count]) => {
+                          const isSelected = selectedFilters[facetName] === val;
+                          return (
+                            <button
+                              key={val}
+                              onClick={() => toggleFilter(facetName, val)}
+                              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+                                isSelected
+                                  ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
+                                  : 'text-slate-300 hover:bg-slate-800/60'
+                              }`}
+                            >
+                              <span className="truncate pr-2">{val}</span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400">
+                                {count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })
-            )}
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
 

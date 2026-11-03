@@ -1,6 +1,26 @@
-# SearchCraft
+<p align="center">
+  <img src="docs/images/logo.png?raw=true" alt="SearchCraft Logo" width="130" style="border-radius: 24px;" />
+</p>
 
-Lightweight single-binary hybrid search engine combining BM25 full-text search and dense vector embeddings with Reciprocal Rank Fusion (RRF), typo tolerance, web crawler, and a 2KB drop-in search widget.
+<h1 align="center">SearchCraft</h1>
+
+<p align="center">
+  <strong>Lightweight single-binary hybrid search engine combining BM25 full-text search and dense vector embeddings with Reciprocal Rank Fusion (RRF), typo tolerance, and a 2KB drop-in command palette widget.</strong>
+</p>
+
+<p align="center">
+  <a href="#overview">Overview</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#visual-showcase">Visual Showcase</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#drop-in-search-widget">Widget</a> •
+  <a href="#cli-commands">CLI</a> •
+  <a href="docs/API_SPEC.md">API Spec</a>
+</p>
+
+<p align="center">
+  <img src="docs/images/searchcraft_demo.gif" alt="SearchCraft Animated Demo" width="100%" style="border-radius: 12px; border: 1px solid #1e293b;" />
+</p>
 
 ---
 
@@ -9,7 +29,7 @@ Lightweight single-binary hybrid search engine combining BM25 full-text search a
 SearchCraft provides a self-hosted search engine designed for SaaS applications, documentation portals, and content websites. It offers instant search capabilities without requiring external JVM clusters or cloud search subscriptions.
 
 Key characteristics:
-- Memory footprint under 40MB RAM under normal workloads (typically under 1MB heap idle).
+- Memory footprint under 40MB RAM under normal workloads (under 2MB heap idle).
 - Single Go binary with embedded SQLite FTS5 and vector capabilities.
 - Hybrid search combining BM25 keyword matching and dense vector similarity through Reciprocal Rank Fusion (RRF).
 - Damerau-Levenshtein typo-tolerance with adaptive token thresholds.
@@ -63,6 +83,38 @@ Key characteristics:
 | * Highlight Match Offsets     |               | * Widget Embed Code Generator |
 +-------------------------------+---------------+-------------------------------+
 ```
+
+---
+
+## Visual Showcase
+
+### Live Search Sandbox & Hybrid Score Breakdown
+Test queries in real time with interactive hybrid balance slider (&alpha;), individual BM25 and vector score breakdowns, and dynamic facet filters:
+
+<p align="center">
+  <img src="docs/images/searchcraft_sandbox.png" alt="SearchCraft Sandbox" width="100%" style="border-radius: 12px; border: 1px solid #1e293b;" />
+</p>
+
+### Drop-In 2KB Search Widget (Cmd+K Modal)
+Embed an instant keyboard-driven search modal into any webpage with a single script tag:
+
+<p align="center">
+  <img src="docs/images/searchcraft_widget.png" alt="SearchCraft Widget Modal" width="100%" style="border-radius: 12px; border: 1px solid #1e293b;" />
+</p>
+
+### Query Analytics & Content Gap Detection
+Track query volumes, latency percentiles (p50/p95/p99), and queries returning zero results:
+
+<p align="center">
+  <img src="docs/images/searchcraft_analytics.png" alt="SearchCraft Query Analytics" width="100%" style="border-radius: 12px; border: 1px solid #1e293b;" />
+</p>
+
+### Responsive Mobile Adaptation
+Full responsive layout with collapsible facet filters and optimized touch navigation on mobile viewports:
+
+<p align="center">
+  <img src="docs/images/searchcraft_mobile.png" alt="SearchCraft Mobile View" width="420" style="border-radius: 12px; border: 1px solid #1e293b;" />
+</p>
 
 ---
 
@@ -153,7 +205,7 @@ Add the standalone search widget to any webpage with a single script tag:
 ></script>
 ```
 
-Press `Cmd+K` (macOS) or `Ctrl+K` (Windows/Linux) to open the palette. Use the arrow keys and `Enter` to navigate results.
+Press `Cmd+K` (macOS) or `Ctrl+K` (Windows/Linux) to open the palette. Use arrow keys and `Enter` to navigate results.
 
 ---
 
