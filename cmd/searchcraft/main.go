@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexandrmotologa/searchcraft/internal/crawler"
 	"github.com/alexandrmotologa/searchcraft/internal/embedding"
 	"github.com/alexandrmotologa/searchcraft/internal/index"
 	"github.com/alexandrmotologa/searchcraft/internal/server"
@@ -34,6 +35,14 @@ func main() {
 		cmdServe(os.Args[2:])
 	case "import":
 		cmdImport(os.Args[2:])
+	case "crawl":
+		cmdCrawl(os.Args[2:])
+	case "export":
+		cmdExport(os.Args[2:])
+	case "backup":
+		cmdBackup(os.Args[2:])
+	case "key":
+		cmdKey(os.Args[2:])
 	case "benchmark":
 		cmdBenchmark(os.Args[2:])
 	case "version":
@@ -54,6 +63,10 @@ Usage:
 Commands:
   serve       Start the HTTP server, REST API, widget server, and admin studio
   import      Bulk ingest a JSON document file into an index
+  crawl       Crawl and index a website or sitemap.xml
+  export      Export all documents from an index to a JSON file
+  backup      Create an atomic hot backup snapshot of the database
+  key         Manage scoped API keys (create, list)
   benchmark   Run performance benchmark against an index
   version     Show application version
 
@@ -214,6 +227,165 @@ func cmdImport(args []string) {
 	duration := time.Since(start)
 	rate := float64(indexed) / duration.Seconds()
 	fmt.Printf("Successfully indexed %d documents into '%s' in %v (%.1f docs/sec)\n", indexed, *indexName, duration, rate)
+}
+
+func cmdCrawl(args []string) {
+	fs := flag.NewFlagSet("crawl", flag.ExitOnError)
+	dbPath := fs.String("db", "./searchcraft.db", "SQLite database file path")
+	indexName := fs.String("index", "webdocs", "Target index name")
+	maxPages := fs.Int("max-pages", 50, "Maximum pages to crawl")
+	_ = fs.Parse(args)
+
+	if len(fs.Args()) == 0 {
+		fmt.Fprintln(os.Stderr, "Error: target URL is required. Example: searchcraft crawl https://example.com/sitemap.xml")
+		os.Exit(1)
+	}
+	targetURL := fs.Args()[0]
+
+	db, err := storage.Open(*dbPath)
+	if err != nil {
+		log.Fatalf("Fatal: open db: %v", err)
+	}
+	defer db.Close()
+
+	emb := embedding.NewFastLocalEmbedder(256)
+	eng, err := index.NewEngine(db, emb)
+	if err != nil {
+		log.Fatalf("Fatal: new engine: %v", err)
+	}
+
+	if _, err := eng.GetIndex(*indexName); err != nil {
+		_ = eng.CreateIndex(*indexName, nil, "hybrid", "fast_local")
+	}
+
+	fmt.Printf("Crawling %s into index '%s' (max %d pages)...\n", targetURL, *indexName, *maxPages)
+	c := crawler.NewCrawler()
+	res, err := c.Crawl(context.Background(), eng, *indexName, storage.CrawlRequest{
+		URL:      targetURL,
+		MaxPages: *maxPages,
+	})
+	if err != nil {
+		log.Fatalf("Fatal: crawl failed: %v", err)
+	}
+
+	fmt.Printf("Successfully crawled %d pages and indexed %d documents in %.1f ms\n", res.PagesCrawled, res.DocsIndexed, res.TookMs)
+}
+
+func cmdExport(args []string) {
+	fs := flag.NewFlagSet("export", flag.ExitOnError)
+	dbPath := fs.String("db", "./searchcraft.db", "SQLite database file path")
+	indexName := fs.String("index", "products", "Index name to export")
+	outFile := fs.String("out", "", "Output file path (default stdout)")
+	_ = fs.Parse(args)
+
+	db, err := storage.Open(*dbPath)
+	if err != nil {
+		log.Fatalf("Fatal: open db: %v", err)
+	}
+	defer db.Close()
+
+	docs, err := db.ExportAllDocuments(*indexName)
+	if err != nil {
+		log.Fatalf("Fatal: export failed: %v", err)
+	}
+
+	jsonBytes, err := json.MarshalIndent(docs, "", "  ")
+	if err != nil {
+		log.Fatalf("Fatal: marshal json: %v", err)
+	}
+
+	if *outFile != "" {
+		if err := os.WriteFile(*outFile, jsonBytes, 0644); err != nil {
+			log.Fatalf("Fatal: write file: %v", err)
+		}
+		fmt.Printf("Exported %d documents from '%s' to %s\n", len(docs), *indexName, *outFile)
+	} else {
+		fmt.Println(string(jsonBytes))
+	}
+}
+
+func cmdBackup(args []string) {
+	fs := flag.NewFlagSet("backup", flag.ExitOnError)
+	dbPath := fs.String("db", "./searchcraft.db", "SQLite database file path")
+	outFile := fs.String("out", fmt.Sprintf("backup_%d.db", time.Now().Unix()), "Backup destination path")
+	_ = fs.Parse(args)
+
+	db, err := storage.Open(*dbPath)
+	if err != nil {
+		log.Fatalf("Fatal: open db: %v", err)
+	}
+	defer db.Close()
+
+	fmt.Printf("Creating atomic SQLite snapshot from %s to %s...\n", *dbPath, *outFile)
+	if err := db.BackupTo(*outFile); err != nil {
+		log.Fatalf("Fatal: backup failed: %v", err)
+	}
+	fmt.Printf("Snapshot created successfully at %s\n", *outFile)
+}
+
+func cmdKey(args []string) {
+	if len(args) == 0 {
+		fmt.Println("Usage: searchcraft key <create|list> [options]")
+		os.Exit(1)
+	}
+
+	dbPath := "./searchcraft.db"
+
+	switch args[0] {
+	case "create":
+		fs := flag.NewFlagSet("key create", flag.ExitOnError)
+		fs.StringVar(&dbPath, "db", "./searchcraft.db", "SQLite database file path")
+		name := fs.String("name", "Default Key", "API key description/name")
+		role := fs.String("role", "search", "API key role (search or admin)")
+		_ = fs.Parse(args[1:])
+
+		db, err := storage.Open(dbPath)
+		if err != nil {
+			log.Fatalf("Fatal: open db: %v", err)
+		}
+		defer db.Close()
+
+		rawKey, meta, err := db.CreateAPIKey(*name, *role)
+		if err != nil {
+			log.Fatalf("Fatal: create key: %v", err)
+		}
+
+		fmt.Println("==================================================")
+		fmt.Println("  NEW API KEY GENERATED (STORE SAFELY)")
+		fmt.Println("==================================================")
+		fmt.Printf("  Key    : %s\n", rawKey)
+		fmt.Printf("  Prefix : %s\n", meta.Prefix)
+		fmt.Printf("  Name   : %s\n", meta.Name)
+		fmt.Printf("  Role   : %s\n", meta.Role)
+		fmt.Println("==================================================")
+
+	case "list":
+		fs := flag.NewFlagSet("key list", flag.ExitOnError)
+		fs.StringVar(&dbPath, "db", "./searchcraft.db", "SQLite database file path")
+		_ = fs.Parse(args[1:])
+
+		db, err := storage.Open(dbPath)
+		if err != nil {
+			log.Fatalf("Fatal: open db: %v", err)
+		}
+		defer db.Close()
+
+		keys, err := db.ListAPIKeys()
+		if err != nil {
+			log.Fatalf("Fatal: list keys: %v", err)
+		}
+
+		if len(keys) == 0 {
+			fmt.Println("No API keys found. Server is operating in open developer mode.")
+			return
+		}
+
+		fmt.Printf("%-20s %-25s %-10s %s\n", "PREFIX", "NAME", "ROLE", "CREATED")
+		fmt.Println(strings.Repeat("-", 75))
+		for _, k := range keys {
+			fmt.Printf("%-20s %-25s %-10s %s\n", k.Prefix+"...", k.Name, k.Role, k.CreatedAt.Format("2006-01-02 15:04"))
+		}
+	}
 }
 
 func cmdBenchmark(args []string) {

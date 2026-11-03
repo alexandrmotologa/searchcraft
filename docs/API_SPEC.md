@@ -1,12 +1,69 @@
 # SearchCraft REST API Specification
 
-SearchCraft exposes a JSON REST API for index management, document ingestion, hybrid search queries, and search analytics.
+SearchCraft exposes a JSON REST API for index management, document ingestion, hybrid search queries, synonyms, merchandising promotions, web crawling, and search analytics.
 
 Base URL: `http://localhost:7700`
 
 ---
 
-## 1. System Health
+## 1. Authentication & Scoped API Keys
+
+SearchCraft supports role-based API keys:
+- **Search Key (`search`)**: Read-only key permitting search, autocomplete suggestions, and health checks. Safe for public web pages and client-side `<script>` widgets.
+- **Admin Key (`admin`)**: Privileged key required for document ingestion, deletion, index management, crawling, synonyms, promotions, and backups.
+
+Keys can be passed via the HTTP header:
+```
+Authorization: Bearer sc_live_search_...
+```
+or as a query parameter for client-side widgets:
+```
+?api_key=sc_live_search_...
+```
+
+### GET `/api/v1/keys`
+Lists registered API keys (admin only).
+
+**Response `200 OK`**:
+```json
+[
+  {
+    "prefix": "sc_live_search_27e",
+    "name": "Public Documentation Widget",
+    "role": "search",
+    "created_at": "2026-11-03T15:30:00Z"
+  }
+]
+```
+
+### POST `/api/v1/keys`
+Generates a new scoped API key. The raw key is returned only once upon creation.
+
+**Request Body**:
+```json
+{
+  "name": "Website Client Key",
+  "role": "search"
+}
+```
+
+**Response `201 Created`**:
+```json
+{
+  "key": "sc_live_search_27e9958ddfa6ce61f32aca2c7fc642cd2d04c9847f4c5e8e",
+  "prefix": "sc_live_search_27e",
+  "name": "Website Client Key",
+  "role": "search",
+  "created_at": "2026-11-03T15:30:00Z"
+}
+```
+
+### DELETE `/api/v1/keys/{prefix}`
+Revokes an API key by prefix.
+
+---
+
+## 2. System Health
 
 ### GET `/health`
 Returns system status, active version, document statistics, and memory usage.
@@ -17,7 +74,7 @@ Returns system status, active version, document statistics, and memory usage.
   "status": "ok",
   "version": "1.0.0",
   "uptime_seconds": 1284,
-  "memory_bytes": 28410200,
+  "memory_bytes": 545744,
   "total_indexes": 3,
   "total_documents": 14250
 }
@@ -25,28 +82,10 @@ Returns system status, active version, document statistics, and memory usage.
 
 ---
 
-## 2. Index Management
+## 3. Index Management
 
 ### GET `/api/v1/indexes`
 Lists all available search indexes along with document counts and configuration.
-
-**Response `200 OK`**:
-```json
-[
-  {
-    "name": "products",
-    "created_at": "2026-11-03T14:00:00Z",
-    "document_count": 1240,
-    "field_boosts": {
-      "title": 3.0,
-      "description": 1.0,
-      "brand": 1.5
-    },
-    "default_mode": "hybrid",
-    "embedding_provider": "fast_local"
-  }
-]
-```
 
 ### POST `/api/v1/indexes`
 Creates a new search index.
@@ -54,155 +93,38 @@ Creates a new search index.
 **Request Body**:
 ```json
 {
-  "name": "docs",
+  "name": "products",
   "field_boosts": {
     "title": 3.0,
-    "content": 1.0,
+    "description": 1.0,
     "tags": 2.0
   },
-  "default_mode": "hybrid",
-  "embedding_provider": "fast_local"
-}
-```
-
-**Response `201 Created`**:
-```json
-{
-  "message": "Index created successfully",
-  "name": "docs"
-}
-```
-
-### GET `/api/v1/indexes/{name}`
-Returns details and statistics for a specific index.
-
-**Response `200 OK`**:
-```json
-{
-  "name": "docs",
-  "created_at": "2026-11-03T14:10:00Z",
-  "document_count": 450,
-  "field_boosts": {
-    "title": 3.0,
-    "content": 1.0
-  },
-  "default_mode": "hybrid",
-  "embedding_provider": "fast_local"
+  "default_mode": "hybrid"
 }
 ```
 
 ### DELETE `/api/v1/indexes/{name}`
-Deletes an index, including its FTS5 virtual table, document records, and stored vectors.
-
-**Response `200 OK`**:
-```json
-{
-  "message": "Index deleted successfully"
-}
-```
+Deletes an index and all associated data.
 
 ---
 
-## 3. Document Ingestion
+## 4. Document Ingestion & Export
 
 ### POST `/api/v1/indexes/{name}/documents`
-Batch inserts or updates documents in the specified index. Each document must contain an `id` field (string or integer). If omitted, an ID is automatically generated.
-
-**Request Body**:
-```json
-[
-  {
-    "id": "doc_101",
-    "title": "Ultra-lightweight Mechanical Keyboard",
-    "description": "Compact 65% wireless mechanical keyboard with hot-swappable switches",
-    "category": "Keyboards",
-    "brand": "Keychron",
-    "price": 89.99,
-    "rating": 4.8,
-    "in_stock": true,
-    "tags": ["wireless", "mechanical", "compact"]
-  },
-  {
-    "id": "doc_102",
-    "title": "Ergonomic Vertical Mouse",
-    "description": "Ergonomic wireless mouse designed to reduce wrist strain during long sessions",
-    "category": "Mice",
-    "brand": "Logitech",
-    "price": 59.99,
-    "rating": 4.6,
-    "in_stock": true,
-    "tags": ["wireless", "ergonomic", "office"]
-  }
-]
-```
-
-**Response `200 OK`**:
-```json
-{
-  "indexed": 2,
-  "failed": 0,
-  "took_ms": 1.8
-}
-```
+Batch inserts or updates documents in the specified index.
 
 ### GET `/api/v1/indexes/{name}/documents`
-Lists documents with pagination support.
+Lists documents with pagination support (`limit`, `offset`).
 
-**Query Parameters**:
-- `limit`: Number of documents to return (default: 20, max: 100)
-- `offset`: Pagination offset (default: 0)
-
-**Response `200 OK`**:
-```json
-{
-  "documents": [
-    {
-      "id": "doc_101",
-      "data": {
-        "title": "Ultra-lightweight Mechanical Keyboard",
-        "description": "Compact 65% wireless mechanical keyboard with hot-swappable switches",
-        "category": "Keyboards",
-        "price": 89.99
-      },
-      "created_at": "2026-11-03T14:15:00Z"
-    }
-  ],
-  "total": 1240,
-  "limit": 20,
-  "offset": 0
-}
-```
-
-### GET `/api/v1/indexes/{name}/documents/{id}`
-Retrieves a single document by its identifier.
-
-**Response `200 OK`**:
-```json
-{
-  "id": "doc_101",
-  "data": {
-    "title": "Ultra-lightweight Mechanical Keyboard",
-    "description": "Compact 65% wireless mechanical keyboard with hot-swappable switches",
-    "category": "Keyboards",
-    "price": 89.99
-  },
-  "created_at": "2026-11-03T14:15:00Z"
-}
-```
+### GET `/api/v1/indexes/{name}/export`
+Streams all indexed documents as a downloadable JSON file.
 
 ### DELETE `/api/v1/indexes/{name}/documents/{id}`
-Deletes a specific document from the index, its FTS5 index, and its vector store.
-
-**Response `200 OK`**:
-```json
-{
-  "message": "Document deleted successfully"
-}
-```
+Deletes a specific document.
 
 ---
 
-## 4. Search Execution
+## 5. Search & Autocomplete
 
 ### POST `/api/v1/indexes/{name}/search`
 Executes an instant search query using BM25 keyword matching, vector similarity, or hybrid Reciprocal Rank Fusion.
@@ -210,114 +132,130 @@ Executes an instant search query using BM25 keyword matching, vector similarity,
 **Request Body**:
 ```json
 {
-  "query": "mechanical keyboard wireless",
+  "query": "mechanical wireless",
   "mode": "hybrid",
   "limit": 10,
   "offset": 0,
   "hybrid_alpha": 0.5,
   "highlight": true,
-  "facets": ["category", "brand"],
-  "filters": {
-    "category": "Keyboards",
-    "price": {
-      "$gte": 50.0,
-      "$lte": 150.0
-    },
-    "in_stock": true
-  }
+  "facets": ["category", "brand"]
 }
 ```
-
-**Field Descriptions**:
-- `query`: Text string to search.
-- `mode`: Search strategy (`hybrid`, `bm25`, `vector`). Default is `hybrid`.
-- `limit`: Maximum number of matching hits (default: 20).
-- `offset`: Pagination offset (default: 0).
-- `hybrid_alpha`: Balance between BM25 (1.0) and Vector (0.0). Default is 0.5.
-- `highlight`: When true, wraps matching text tokens inside `<mark>` tags.
-- `facets`: List of fields for which category counts should be calculated.
-- `filters`: Structured filter criteria supporting equality, `$gte`, `$lte`, `$gt`, `$lt`, and `$in`.
 
 **Response `200 OK`**:
 ```json
 {
   "hits": [
     {
-      "id": "doc_101",
+      "id": "prod_1",
       "score": 0.942,
       "rrf_score": 0.0322,
       "bm25_score": 0.884,
       "vector_score": 0.912,
       "document": {
-        "id": "doc_101",
-        "title": "Ultra-lightweight Mechanical Keyboard",
-        "description": "Compact 65% wireless mechanical keyboard with hot-swappable switches",
+        "id": "prod_1",
+        "title": "Wireless Mechanical Keyboard",
         "category": "Keyboards",
-        "brand": "Keychron",
-        "price": 89.99,
-        "rating": 4.8,
-        "in_stock": true
+        "price": 199.00
       },
       "highlights": {
-        "title": "Ultra-lightweight <mark>Mechanical</mark> <mark>Keyboard</mark>",
-        "description": "Compact 65% <mark>wireless</mark> <mark>mechanical</mark> <mark>keyboard</mark> with hot-swappable switches"
+        "title": "<mark>Wireless</mark> <mark>Mechanical</mark> Keyboard"
       }
     }
   ],
   "total": 1,
-  "took_ms": 2.4,
-  "query": "mechanical keyboard wireless",
+  "took_ms": 0.92,
+  "query": "mechanical wireless",
   "mode": "hybrid",
   "facets": {
-    "category": {
-      "Keyboards": 1
-    },
-    "brand": {
-      "Keychron": 1
-    }
-  }
+    "category": { "Keyboards": 1 }
+  },
+  "suggestions": ["mechanical switches", "wireless mouse"]
+}
+```
+
+### GET `/api/v1/indexes/{name}/suggest?q={prefix}&limit=5`
+Returns autocomplete suggestions matching a query prefix.
+
+---
+
+## 6. Synonyms Engine
+
+### GET `/api/v1/indexes/{name}/synonyms`
+Lists all synonym rules registered for an index.
+
+### POST `/api/v1/indexes/{name}/synonyms`
+Adds a synonym mapping.
+
+**Request Body**:
+```json
+{
+  "term": "laptop",
+  "synonyms": ["notebook", "macbook"],
+  "is_two_way": true
+}
+```
+
+### DELETE `/api/v1/indexes/{name}/synonyms/{term}`
+Deletes a synonym rule.
+
+---
+
+## 7. Merchandising & Pinned Results
+
+### GET `/api/v1/indexes/{name}/promotions`
+Lists active promotion rules.
+
+### POST `/api/v1/indexes/{name}/promotions`
+Pins specific documents to top ranks when a query matches the designated pattern.
+
+**Request Body**:
+```json
+{
+  "query_pattern": "pricing",
+  "pinned_doc_ids": ["doc_pricing_plans"],
+  "position": 1
+}
+```
+
+### DELETE `/api/v1/indexes/{name}/promotions/{query}`
+Deletes a promotion rule.
+
+---
+
+## 8. Integrated Web Crawler
+
+### POST `/api/v1/indexes/{name}/crawl`
+Crawls a website or XML sitemap, extracting pages and body text into the index.
+
+**Request Body**:
+```json
+{
+  "url": "https://docs.example.com/sitemap.xml",
+  "max_pages": 50
+}
+```
+
+**Response `200 OK`**:
+```json
+{
+  "url": "https://docs.example.com/sitemap.xml",
+  "pages_crawled": 34,
+  "docs_indexed": 34,
+  "took_ms": 1420.5
 }
 ```
 
 ---
 
-## 5. Analytics & Observability
+## 9. Backups & Snapshots
 
-### GET `/api/v1/analytics/overview`
-Returns summary metrics: total search queries, zero-result search count, average query latency, and latency percentiles.
+### POST `/api/v1/system/backup`
+Performs an atomic hot snapshot using SQLite `VACUUM INTO`.
 
-**Response `200 OK`**:
+**Request Body**:
 ```json
 {
-  "total_searches": 8420,
-  "zero_result_searches": 142,
-  "zero_result_rate": 0.0168,
-  "avg_latency_ms": 2.7,
-  "p50_latency_ms": 2.1,
-  "p95_latency_ms": 4.8,
-  "p99_latency_ms": 8.2
+  "path": "./backup_prod.db"
 }
-```
-
-### GET `/api/v1/analytics/popular`
-Returns the most frequently executed search queries.
-
-**Response `200 OK`**:
-```json
-[
-  { "query": "mechanical keyboard", "count": 1420, "avg_hits": 18 },
-  { "query": "wireless mouse", "count": 940, "avg_hits": 12 },
-  { "query": "usb-c dock", "count": 512, "avg_hits": 8 }
-]
-```
-
-### GET `/api/v1/analytics/zero-results`
-Lists queries that produced zero matching documents, ordered by search frequency.
-
-**Response `200 OK`**:
-```json
-[
-  { "query": "trackball wireless red", "count": 34, "last_searched": "2026-11-03T14:22:00Z" },
-  { "query": "curved oled monitor 49", "count": 21, "last_searched": "2026-11-03T13:45:00Z" }
-]
 ```

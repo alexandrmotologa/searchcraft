@@ -47,12 +47,14 @@ type SearchHit struct {
 
 // SearchResponse is returned to search clients.
 type SearchResponse struct {
-	Hits   []SearchHit               `json:"hits"`
-	Total  int                       `json:"total"`
-	TookMs float64                   `json:"took_ms"`
-	Query  string                    `json:"query"`
-	Mode   string                    `json:"mode"`
-	Facets map[string]map[string]int `json:"facets,omitempty"`
+	Hits        []SearchHit               `json:"hits"`
+	Total       int                       `json:"total"`
+	TookMs      float64                   `json:"took_ms"`
+	Query       string                    `json:"query"`
+	Mode        string                    `json:"mode"`
+	Facets      map[string]map[string]int `json:"facets,omitempty"`
+	DidYouMean  string                    `json:"did_you_mean,omitempty"`
+	Suggestions []string                  `json:"suggestions,omitempty"`
 }
 
 // SearchLog records individual query executions for latency and volume analytics.
@@ -90,3 +92,42 @@ type PopularQuery struct {
 	Count   int64   `json:"count"`
 	AvgHits float64 `json:"avg_hits"`
 }
+
+// APIKey represents an authentication key for SearchCraft.
+type APIKey struct {
+	Prefix    string    `json:"prefix"`
+	Name      string    `json:"name"`
+	Role      string    `json:"role"` // "admin" or "search"
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// SynonymRule defines synonym mappings for query expansion.
+type SynonymRule struct {
+	IndexName string   `json:"index_name"`
+	Term      string   `json:"term"`
+	Synonyms  []string `json:"synonyms"`
+	IsTwoWay  bool     `json:"is_two_way"`
+}
+
+// PromotionRule pins specific documents to top ranks for designated queries.
+type PromotionRule struct {
+	IndexName    string   `json:"index_name"`
+	QueryPattern string   `json:"query_pattern"`
+	PinnedDocIDs []string `json:"pinned_doc_ids"`
+	Position     int      `json:"position"` // 1-based start position
+}
+
+// CrawlRequest parameters for the integrated web crawler.
+type CrawlRequest struct {
+	URL      string `json:"url"`
+	MaxPages int    `json:"max_pages,omitempty"` // default 50, max 200
+}
+
+// CrawlResult summary of a website crawl run.
+type CrawlResult struct {
+	URL          string  `json:"url"`
+	PagesCrawled int     `json:"pages_crawled"`
+	DocsIndexed  int     `json:"docs_indexed"`
+	TookMs       float64 `json:"took_ms"`
+}
+

@@ -239,11 +239,19 @@ searchcraft/
 ## 6. Implementation Stages & Verification Checklist
 
 1. [x] Phase 0: Repository setup, license, humanized documentation, and portfolio registration.
-2. [ ] Phase 1: Go module structure, SQLite storage layer, FTS5 virtual tables, and migrations.
-3. [ ] Phase 2: Embedding engines (Fast deterministic local, ONNX MiniLM, and remote client).
-4. [ ] Phase 3: BM25 ranking, vector cosine similarity, and Reciprocal Rank Fusion combiner.
-5. [ ] Phase 4: Typo-tolerance engine and dynamic facet aggregator.
-6. [ ] Phase 5: High-speed ingestion API, REST endpoints, and query analytics tracker.
-7. [ ] Phase 6: Standalone 2KB Cmd+K search widget.
-8. [ ] Phase 7: Embedded React 19 Admin Studio.
-9. [ ] Phase 8: CLI commands, seed datasets, tests, and integration benchmarks.
+2. [x] Phase 1: Go module structure, SQLite storage layer, FTS5 virtual tables, WAL mode, and migrations.
+3. [x] Phase 2: Embedding engines (Fast deterministic local n-gram vectorizer, ONNX MiniLM, and remote client).
+4. [x] Phase 3: BM25 ranking, vector cosine similarity, and Reciprocal Rank Fusion combiner (RRF).
+5. [x] Phase 4: Typo-tolerance engine (Damerau-Levenshtein) and dynamic facet aggregator.
+6. [x] Phase 5: High-speed ingestion API, REST endpoints, RBAC authentication, and query analytics tracker.
+7. [x] Phase 6: Standalone 2KB Cmd+K search widget with auto themes and i18n support.
+8. [x] Phase 7: Embedded React 19 Admin Studio with live playground, doc manager, crawler, keys, and synonyms.
+9. [x] Phase 8: CLI commands (serve, import, crawl, export, backup, key, benchmark), seed datasets, tests, and integration benchmarks.
+10. [x] Phase 9: Advanced enhancements:
+    - Role-based API keys (`search` vs `admin`) with SHA-256 storage
+    - Synonym expansion mappings (bidirectional and one-way)
+    - Merchandising rules and promoted pinned results
+    - "Did you mean?" typo correction suggestions and prefix autocomplete
+    - Concurrent web crawler with sitemap parsing and semantic text extraction
+    - Live hot snapshot backups via SQLite `VACUUM INTO`
+    - Widget multi-language localization (EN, RO, ES, FR, DE) and Light/Dark/Auto theme support

@@ -6,6 +6,10 @@ import {
   PopularQuery,
   ZeroResultQuery,
   SystemHealth,
+  APIKey,
+  SynonymRule,
+  PromotionRule,
+  CrawlResult,
 } from '../types/search';
 
 const BASE_URL = '';
@@ -109,3 +113,116 @@ export async function fetchZeroResults(limit = 15): Promise<ZeroResultQuery[]> {
   if (!res.ok) throw new Error('Failed to fetch zero result queries');
   return res.json();
 }
+
+// --- API Keys ---
+export async function fetchAPIKeys(): Promise<APIKey[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/keys`);
+  if (!res.ok) throw new Error('Failed to fetch api keys');
+  return res.json();
+}
+
+export async function createAPIKey(name: string, role: 'admin' | 'search'): Promise<{ key: string; prefix: string; name: string; role: string }> {
+  const res = await fetch(`${BASE_URL}/api/v1/keys`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, role }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to create api key');
+  }
+  return res.json();
+}
+
+export async function deleteAPIKey(prefix: string): Promise<any> {
+  const res = await fetch(`${BASE_URL}/api/v1/keys/${encodeURIComponent(prefix)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete api key');
+  return res.json();
+}
+
+// --- Synonyms ---
+export async function fetchSynonyms(indexName: string): Promise<SynonymRule[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/indexes/${encodeURIComponent(indexName)}/synonyms`);
+  if (!res.ok) throw new Error('Failed to fetch synonyms');
+  return res.json();
+}
+
+export async function addSynonym(indexName: string, term: string, synonyms: string[], isTwoWay = true): Promise<any> {
+  const res = await fetch(`${BASE_URL}/api/v1/indexes/${encodeURIComponent(indexName)}/synonyms`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ term, synonyms, is_two_way: isTwoWay }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to add synonym');
+  }
+  return res.json();
+}
+
+export async function deleteSynonym(indexName: string, term: string): Promise<any> {
+  const res = await fetch(`${BASE_URL}/api/v1/indexes/${encodeURIComponent(indexName)}/synonyms/${encodeURIComponent(term)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete synonym');
+  return res.json();
+}
+
+// --- Promotions (Merchandising) ---
+export async function fetchPromotions(indexName: string): Promise<PromotionRule[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/indexes/${encodeURIComponent(indexName)}/promotions`);
+  if (!res.ok) throw new Error('Failed to fetch promotions');
+  return res.json();
+}
+
+export async function addPromotion(indexName: string, queryPattern: string, pinnedDocIds: string[], position = 1): Promise<any> {
+  const res = await fetch(`${BASE_URL}/api/v1/indexes/${encodeURIComponent(indexName)}/promotions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query_pattern: queryPattern, pinned_doc_ids: pinnedDocIds, position }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Failed to add promotion');
+  }
+  return res.json();
+}
+
+export async function deletePromotion(indexName: string, queryPattern: string): Promise<any> {
+  const res = await fetch(`${BASE_URL}/api/v1/indexes/${encodeURIComponent(indexName)}/promotions/${encodeURIComponent(queryPattern)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete promotion');
+  return res.json();
+}
+
+// --- Web Crawler ---
+export async function crawlWebsite(indexName: string, url: string, maxPages = 50): Promise<CrawlResult> {
+  const res = await fetch(`${BASE_URL}/api/v1/indexes/${encodeURIComponent(indexName)}/crawl`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, max_pages: maxPages }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Crawl failed');
+  }
+  return res.json();
+}
+
+// --- Backup ---
+export async function backupDatabase(path?: string): Promise<{ message: string; path: string }> {
+  const res = await fetch(`${BASE_URL}/api/v1/system/backup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'Backup failed');
+  }
+  return res.json();
+}
+

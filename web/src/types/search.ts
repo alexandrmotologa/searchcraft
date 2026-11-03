@@ -64,3 +64,31 @@ export interface SystemHealth {
   total_indexes: number;
   total_documents: number;
 }
+
+export interface APIKey {
+  prefix: string;
+  name: string;
+  role: 'admin' | 'search';
+  created_at: string;
+}
+
+export interface SynonymRule {
+  index_name: string;
+  term: string;
+  synonyms: string[];
+  is_two_way: boolean;
+}
+
+export interface PromotionRule {
+  index_name: string;
+  query_pattern: string;
+  pinned_doc_ids: string[];
+  position: number;
+}
+
+export interface CrawlResult {
+  url: string;
+  pages_crawled: number;
+  docs_indexed: number;
+  took_ms: number;
+}

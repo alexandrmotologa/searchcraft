@@ -154,4 +154,57 @@ func TestEngineHybridSearch(t *testing.T) {
 			t.Errorf("expected only Databases category, got %v", hit.Document["category"])
 		}
 	}
+
+	// 7. Test Synonyms Expansion
+	err = db.AddSynonym(storage.SynonymRule{
+		IndexName: "articles",
+		Term:      "golang",
+		Synonyms:  []string{"google-go"},
+		IsTwoWay:  true,
+	})
+	if err != nil {
+		t.Fatalf("add synonym: %v", err)
+	}
+
+	resSyn, err := engine.Search(ctx, "articles", storage.SearchRequest{
+		Query: "google-go",
+		Mode:  "bm25",
+	})
+	if err != nil || len(resSyn.Hits) == 0 {
+		t.Fatalf("expected hits for expanded synonym 'google-go'")
+	}
+	if resSyn.Hits[0].ID != "art_1" {
+		t.Errorf("expected art_1 via synonym, got %s", resSyn.Hits[0].ID)
+	}
+
+	// 8. Test Merchandising / Pinned Promotions
+	err = db.AddPromotion(storage.PromotionRule{
+		IndexName:    "articles",
+		QueryPattern: "overview",
+		PinnedDocIDs: []string{"art_3"},
+		Position:     1,
+	})
+	if err != nil {
+		t.Fatalf("add promotion: %v", err)
+	}
+
+	resPromo, err := engine.Search(ctx, "articles", storage.SearchRequest{
+		Query: "system overview",
+		Mode:  "hybrid",
+	})
+	if err != nil || len(resPromo.Hits) == 0 {
+		t.Fatalf("expected hits with promotion")
+	}
+	if resPromo.Hits[0].ID != "art_3" {
+		t.Errorf("expected pinned art_3 at position 1, got %s", resPromo.Hits[0].ID)
+	}
+
+	// 9. Test Autocomplete Suggestions
+	suggestions, err := engine.Suggest(ctx, "articles", "re", 5)
+	if err != nil {
+		t.Fatalf("suggest: %v", err)
+	}
+	if len(suggestions) == 0 {
+		t.Errorf("expected suggestions for prefix 're', got 0")
+	}
 }

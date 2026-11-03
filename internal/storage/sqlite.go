@@ -1,11 +1,15 @@
 package storage
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -106,6 +110,31 @@ func (d *DB) initSchema() error {
 			count INTEGER NOT NULL DEFAULT 1,
 			last_searched DATETIME NOT NULL,
 			PRIMARY KEY (index_name, query)
+		);`,
+
+		`CREATE TABLE IF NOT EXISTS sc_api_keys (
+			key_hash TEXT PRIMARY KEY,
+			prefix TEXT NOT NULL,
+			name TEXT NOT NULL,
+			role TEXT NOT NULL,
+			created_at DATETIME NOT NULL
+		);`,
+
+		`CREATE TABLE IF NOT EXISTS sc_synonyms (
+			index_name TEXT NOT NULL,
+			term TEXT NOT NULL,
+			synonyms TEXT NOT NULL,
+			is_two_way INTEGER NOT NULL DEFAULT 1,
+			PRIMARY KEY (index_name, term)
+		);`,
+
+		`CREATE TABLE IF NOT EXISTS sc_promotions (
+			index_name TEXT NOT NULL,
+			query_pattern TEXT NOT NULL,
+			pinned_doc_ids TEXT NOT NULL,
+			position INTEGER NOT NULL DEFAULT 1,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (index_name, query_pattern)
 		);`,
 	}
 
@@ -828,3 +857,461 @@ func extractTags(m map[string]any, keys ...string) string {
 	}
 	return ""
 }
+
+// --- API Keys Management ---
+
+func hashKey(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
+// CreateAPIKey generates a cryptographically secure API key and persists its hash.
+func (d *DB) CreateAPIKey(name, role string) (string, *APIKey, error) {
+	if role != "admin" && role != "search" {
+		role = "search"
+	}
+	if strings.TrimSpace(name) == "" {
+		name = "Default Key"
+	}
+
+	randomBytes := make([]byte, 24)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", nil, fmt.Errorf("generate random key: %w", err)
+	}
+
+	rawKey := fmt.Sprintf("sc_live_%s_%s", role, hex.EncodeToString(randomBytes))
+	prefix := rawKey[:18]
+	h := hashKey(rawKey)
+	now := time.Now().UTC()
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	_, err := d.db.Exec(`
+		INSERT INTO sc_api_keys (key_hash, prefix, name, role, created_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, h, prefix, name, role, now)
+	if err != nil {
+		return "", nil, fmt.Errorf("insert api key: %w", err)
+	}
+
+	return rawKey, &APIKey{
+		Prefix:    prefix,
+		Name:      name,
+		Role:      role,
+		CreatedAt: now,
+	}, nil
+}
+
+// ListAPIKeys lists all active API keys.
+func (d *DB) ListAPIKeys() ([]APIKey, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	rows, err := d.db.Query(`SELECT prefix, name, role, created_at FROM sc_api_keys ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []APIKey
+	for rows.Next() {
+		var k APIKey
+		if err := rows.Scan(&k.Prefix, &k.Name, &k.Role, &k.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, k)
+	}
+	return list, nil
+}
+
+// DeleteAPIKey removes an API key by prefix.
+func (d *DB) DeleteAPIKey(prefix string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	_, err := d.db.Exec(`DELETE FROM sc_api_keys WHERE prefix = ?`, prefix)
+	return err
+}
+
+// ValidateAPIKey verifies a raw bearer key against stored hashes.
+func (d *DB) ValidateAPIKey(rawKey string) (*APIKey, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	h := hashKey(rawKey)
+	var k APIKey
+	err := d.db.QueryRow(`
+		SELECT prefix, name, role, created_at
+		FROM sc_api_keys
+		WHERE key_hash = ?
+	`, h).Scan(&k.Prefix, &k.Name, &k.Role, &k.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &k, nil
+}
+
+// CountAPIKeys returns the total number of registered keys.
+func (d *DB) CountAPIKeys() (int, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	var cnt int
+	err := d.db.QueryRow(`SELECT COUNT(*) FROM sc_api_keys`).Scan(&cnt)
+	return cnt, err
+}
+
+// --- Synonyms Management ---
+
+// AddSynonym creates or updates a synonym mapping.
+func (d *DB) AddSynonym(rule SynonymRule) error {
+	cleanName, err := sanitizeIndexName(rule.IndexName)
+	if err != nil {
+		return err
+	}
+	term := strings.ToLower(strings.TrimSpace(rule.Term))
+	if term == "" || len(rule.Synonyms) == 0 {
+		return fmt.Errorf("term and synonyms cannot be empty")
+	}
+
+	synonymsJSON, err := json.Marshal(rule.Synonyms)
+	if err != nil {
+		return err
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	twoWayInt := 0
+	if rule.IsTwoWay {
+		twoWayInt = 1
+	}
+
+	_, err = d.db.Exec(`
+		INSERT INTO sc_synonyms (index_name, term, synonyms, is_two_way)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(index_name, term) DO UPDATE SET
+			synonyms = excluded.synonyms,
+			is_two_way = excluded.is_two_way
+	`, cleanName, term, string(synonymsJSON), twoWayInt)
+
+	return err
+}
+
+// ListSynonyms retrieves all synonym rules for an index.
+func (d *DB) ListSynonyms(indexName string) ([]SynonymRule, error) {
+	cleanName, err := sanitizeIndexName(indexName)
+	if err != nil {
+		return nil, err
+	}
+
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	rows, err := d.db.Query(`
+		SELECT term, synonyms, is_two_way
+		FROM sc_synonyms
+		WHERE index_name = ?
+		ORDER BY term ASC
+	`, cleanName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []SynonymRule
+	for rows.Next() {
+		var term, synRaw string
+		var twoWayInt int
+		if err := rows.Scan(&term, &synRaw, &twoWayInt); err != nil {
+			return nil, err
+		}
+
+		var synList []string
+		_ = json.Unmarshal([]byte(synRaw), &synList)
+
+		list = append(list, SynonymRule{
+			IndexName: cleanName,
+			Term:      term,
+			Synonyms:  synList,
+			IsTwoWay:  twoWayInt == 1,
+		})
+	}
+	return list, nil
+}
+
+// DeleteSynonym removes a synonym rule.
+func (d *DB) DeleteSynonym(indexName, term string) error {
+	cleanName, err := sanitizeIndexName(indexName)
+	if err != nil {
+		return err
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	_, err = d.db.Exec(`
+		DELETE FROM sc_synonyms
+		WHERE index_name = ? AND term = ?
+	`, cleanName, strings.ToLower(strings.TrimSpace(term)))
+	return err
+}
+
+// GetSynonymMap compiles an in-memory synonym lookup map.
+func (d *DB) GetSynonymMap(indexName string) (map[string][]string, error) {
+	rules, err := d.ListSynonyms(indexName)
+	if err != nil {
+		return nil, err
+	}
+
+	res := make(map[string][]string)
+	for _, r := range rules {
+		res[r.Term] = append(res[r.Term], r.Synonyms...)
+		if r.IsTwoWay {
+			for _, syn := range r.Synonyms {
+				low := strings.ToLower(strings.TrimSpace(syn))
+				res[low] = append(res[low], r.Term)
+			}
+		}
+	}
+	return res, nil
+}
+
+// --- Merchandising & Pinned Results ---
+
+// AddPromotion registers or updates a promotion rule.
+func (d *DB) AddPromotion(rule PromotionRule) error {
+	cleanName, err := sanitizeIndexName(rule.IndexName)
+	if err != nil {
+		return err
+	}
+	pattern := strings.ToLower(strings.TrimSpace(rule.QueryPattern))
+	if pattern == "" || len(rule.PinnedDocIDs) == 0 {
+		return fmt.Errorf("query_pattern and pinned_doc_ids cannot be empty")
+	}
+
+	pos := rule.Position
+	if pos <= 0 {
+		pos = 1
+	}
+
+	idsJSON, err := json.Marshal(rule.PinnedDocIDs)
+	if err != nil {
+		return err
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	now := time.Now().UTC()
+	_, err = d.db.Exec(`
+		INSERT INTO sc_promotions (index_name, query_pattern, pinned_doc_ids, position, created_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(index_name, query_pattern) DO UPDATE SET
+			pinned_doc_ids = excluded.pinned_doc_ids,
+			position = excluded.position,
+			created_at = excluded.created_at
+	`, cleanName, pattern, string(idsJSON), pos, now)
+	return err
+}
+
+// ListPromotions lists all promotion rules for an index.
+func (d *DB) ListPromotions(indexName string) ([]PromotionRule, error) {
+	cleanName, err := sanitizeIndexName(indexName)
+	if err != nil {
+		return nil, err
+	}
+
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	rows, err := d.db.Query(`
+		SELECT query_pattern, pinned_doc_ids, position
+		FROM sc_promotions
+		WHERE index_name = ?
+		ORDER BY created_at DESC
+	`, cleanName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []PromotionRule
+	for rows.Next() {
+		var pattern, idsRaw string
+		var pos int
+		if err := rows.Scan(&pattern, &idsRaw, &pos); err != nil {
+			return nil, err
+		}
+
+		var docIDs []string
+		_ = json.Unmarshal([]byte(idsRaw), &docIDs)
+
+		list = append(list, PromotionRule{
+			IndexName:    cleanName,
+			QueryPattern: pattern,
+			PinnedDocIDs: docIDs,
+			Position:     pos,
+		})
+	}
+	return list, nil
+}
+
+// DeletePromotion removes a promotion rule.
+func (d *DB) DeletePromotion(indexName, queryPattern string) error {
+	cleanName, err := sanitizeIndexName(indexName)
+	if err != nil {
+		return err
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	_, err = d.db.Exec(`
+		DELETE FROM sc_promotions
+		WHERE index_name = ? AND query_pattern = ?
+	`, cleanName, strings.ToLower(strings.TrimSpace(queryPattern)))
+	return err
+}
+
+// GetMatchingPromotions finds promotions that match the search query.
+func (d *DB) GetMatchingPromotions(indexName, query string) ([]PromotionRule, error) {
+	cleanName, err := sanitizeIndexName(indexName)
+	if err != nil {
+		return nil, err
+	}
+
+	cleanQ := strings.ToLower(strings.TrimSpace(query))
+	if cleanQ == "" {
+		return nil, nil
+	}
+
+	all, err := d.ListPromotions(cleanName)
+	if err != nil {
+		return nil, err
+	}
+
+	var matches []PromotionRule
+	for _, p := range all {
+		if strings.Contains(cleanQ, p.QueryPattern) || strings.Contains(p.QueryPattern, cleanQ) {
+			matches = append(matches, p)
+		}
+	}
+	return matches, nil
+}
+
+// --- Vocabulary & Suggestions ---
+
+// GetIndexVocabulary extracts frequent tokens from the FTS5 index for instant autocomplete.
+func (d *DB) GetIndexVocabulary(indexName string, limit int) ([]string, error) {
+	cleanName, err := sanitizeIndexName(indexName)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+
+	ftsTable := ftsTableName(cleanName)
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	// Query FTS5 vocab table or extract top terms from title/content
+	vocabQuery := fmt.Sprintf(`
+		SELECT DISTINCT term FROM (
+			SELECT title AS term FROM %s WHERE title != ''
+			UNION
+			SELECT tags AS term FROM %s WHERE tags != ''
+		) LIMIT ?
+	`, ftsTable, ftsTable)
+
+	rows, err := d.db.Query(vocabQuery, limit*5)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	termSet := make(map[string]struct{})
+	for rows.Next() {
+		var text string
+		if err := rows.Scan(&text); err == nil {
+			for _, w := range strings.Fields(text) {
+				wClean := strings.ToLower(strings.Trim(w, ".,!?-:;\"'()[]{}"))
+				if len(wClean) >= 3 {
+					termSet[wClean] = struct{}{}
+				}
+			}
+		}
+	}
+
+	var result []string
+	for term := range termSet {
+		result = append(result, term)
+		if len(result) >= limit {
+			break
+		}
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+// --- Data Portability: Export & Online Snapshot ---
+
+// ExportAllDocuments extracts all documents for an index.
+func (d *DB) ExportAllDocuments(indexName string) ([]Document, error) {
+	cleanName, err := sanitizeIndexName(indexName)
+	if err != nil {
+		return nil, err
+	}
+
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	rows, err := d.db.Query(`
+		SELECT doc_id, data, created_at, updated_at
+		FROM sc_documents
+		WHERE index_name = ?
+		ORDER BY created_at ASC
+	`, cleanName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var docs []Document
+	for rows.Next() {
+		var docID, rawData string
+		var createdAt, updatedAt time.Time
+		if err := rows.Scan(&docID, &rawData, &createdAt, &updatedAt); err != nil {
+			return nil, err
+		}
+
+		var data map[string]any
+		_ = json.Unmarshal([]byte(rawData), &data)
+
+		docs = append(docs, Document{
+			ID:        docID,
+			Index:     cleanName,
+			Data:      data,
+			RawJSON:   rawData,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+		})
+	}
+	return docs, nil
+}
+
+// BackupTo creates an atomic hot snapshot of the database using SQLite VACUUM INTO.
+func (d *DB) BackupTo(targetPath string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	// Ensure any old file at targetPath is removed first as VACUUM INTO requires target not to exist
+	_ = os.Remove(targetPath)
+
+	query := fmt.Sprintf("VACUUM INTO '%s';", strings.ReplaceAll(targetPath, "'", "''"))
+	_, err := d.db.Exec(query)
+	return err
+}
+

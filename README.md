@@ -1,6 +1,6 @@
 # SearchCraft
 
-Lightweight single-binary hybrid search engine combining BM25 full-text search and dense vector embeddings with Reciprocal Rank Fusion (RRF), typo tolerance, and a 2KB drop-in search widget.
+Lightweight single-binary hybrid search engine combining BM25 full-text search and dense vector embeddings with Reciprocal Rank Fusion (RRF), typo tolerance, web crawler, and a 2KB drop-in search widget.
 
 ---
 
@@ -9,12 +9,16 @@ Lightweight single-binary hybrid search engine combining BM25 full-text search a
 SearchCraft provides a self-hosted search engine designed for SaaS applications, documentation portals, and content websites. It offers instant search capabilities without requiring external JVM clusters or cloud search subscriptions.
 
 Key characteristics:
-- Memory footprint under 40MB RAM under normal workloads.
+- Memory footprint under 40MB RAM under normal workloads (typically under 1MB heap idle).
 - Single Go binary with embedded SQLite FTS5 and vector capabilities.
 - Hybrid search combining BM25 keyword matching and dense vector similarity through Reciprocal Rank Fusion (RRF).
 - Damerau-Levenshtein typo-tolerance with adaptive token thresholds.
+- Synonyms engine with one-way and bidirectional term expansion.
+- Merchandising rules and curated promotion pinning.
+- Integrated web crawler and XML sitemap ingester.
 - Dynamic facet aggregation and range filtering.
-- Standalone 2KB command palette search widget (Cmd+K) embeddable via a single `<script>` tag.
+- Standalone 2KB command palette search widget (Cmd+K) with Light/Dark/Auto themes and 5-language localization.
+- Role-based API keys distinguishing public search tokens from administrative keys.
 - Built-in React 19 administration studio for query debugging, analytics, and document inspection.
 
 ---
@@ -31,9 +35,9 @@ Key characteristics:
 +---------------v---------------+               +---------------v---------------+
 |     REST API & Ingestion      |               |     Hybrid Query Processor    |
 | * POST /indexes/{id}/docs     |               | * BM25 Token Matching         |
-| * Schema Auto-Inference       |               | * Typo Tolerance Engine       |
-| * Batch Bulk Upsert           |               | * Dense Vector Similarity     |
-| * Document Deletion           |               | * Reciprocal Rank Fusion      |
+| * Web Crawler & Sitemap       |               | * Typo Tolerance Engine       |
+| * Synonyms & Merchandising    |               | * Dense Vector Similarity     |
+| * Role-Based Access Control   |               | * Reciprocal Rank Fusion      |
 +---------------+---------------+               +---------------+---------------+
                 |                                               |
                 +-----------------------+-----------------------+
@@ -44,6 +48,7 @@ Key characteristics:
 | * Documents Table: JSON payload and metadata                                  |
 | * FTS5 Table: Porter stemmer, trigram tokenizer, column weights               |
 | * Vectors Table: Packed float32 BLOB vectors with cosine index                |
+| * Synonyms & Promotions Tables: Term expansion & pinned results               |
 | * Analytics Table: Query latencies, volume, zero-result queries               |
 +---------------------------------------+---------------------------------------+
                                         |
@@ -52,8 +57,9 @@ Key characteristics:
 +---------------v---------------+               +---------------v---------------+
 |   2KB Standalone Search Widget|               |    React 19 Admin Studio      |
 | * Cmd+K / Ctrl+K Modal        |               | * Live Search Sandbox         |
-| * Zero External Dependencies  |               | * Document & Index Explorer   |
-| * Keyboard Navigation         |               | * Analytics & Zero-Results    |
+| * Auto Light/Dark Themes      |               | * Document & Index Explorer   |
+| * Multi-Language (i18n)       |               | * Synonyms & Merchandising    |
+| * Real-time Autocomplete      |               | * Integrated Web Crawler      |
 | * Highlight Match Offsets     |               | * Widget Embed Code Generator |
 +-------------------------------+---------------+-------------------------------+
 ```
@@ -90,7 +96,9 @@ curl -X POST http://localhost:7700/api/v1/indexes \
   }'
 ```
 
-### 3. Ingest Documents
+### 3. Ingest Documents or Crawl a Website
+
+Ingest documents via REST API:
 
 ```bash
 curl -X POST http://localhost:7700/api/v1/indexes/products/documents \
@@ -104,17 +112,14 @@ curl -X POST http://localhost:7700/api/v1/indexes/products/documents \
       "brand": "Keychron",
       "price": 89.99,
       "in_stock": true
-    },
-    {
-      "id": "ms_01",
-      "title": "Ergonomic Wireless Mouse",
-      "description": "Ergonomic vertical mouse with low latency wireless connection",
-      "category": "Mice",
-      "brand": "Logitech",
-      "price": 69.99,
-      "in_stock": true
     }
   ]'
+```
+
+Or crawl an entire website via sitemap.xml:
+
+```bash
+./searchcraft crawl --index docs https://docs.example.com/sitemap.xml
 ```
 
 ### 4. Search
@@ -141,12 +146,27 @@ Add the standalone search widget to any webpage with a single script tag:
   src="http://localhost:7700/widget.js"
   data-url="http://localhost:7700"
   data-index="products"
+  data-theme="auto"
+  data-lang="en"
   data-placeholder="Search products..."
   data-accent="#3b82f6"
 ></script>
 ```
 
 Press `Cmd+K` (macOS) or `Ctrl+K` (Windows/Linux) to open the palette. Use the arrow keys and `Enter` to navigate results.
+
+---
+
+## CLI Commands
+
+- `searchcraft serve [--port 7700] [--db searchcraft.db]`: Start HTTP engine, REST API, widget, and admin studio.
+- `searchcraft import --index <name> --file <data.json>`: Batch ingest documents from JSON.
+- `searchcraft crawl --index <name> [--max-pages 50] <url>`: Crawl and index website pages from URL or sitemap.
+- `searchcraft export --index <name> [--out export.json]`: Export indexed documents.
+- `searchcraft backup [--out backup.db]`: Create an atomic online snapshot using SQLite `VACUUM INTO`.
+- `searchcraft key create --name "Widget" --role search`: Generate scoped API key.
+- `searchcraft key list`: List active API keys.
+- `searchcraft benchmark --index <name>`: Measure queries per second and latency percentiles.
 
 ---
 

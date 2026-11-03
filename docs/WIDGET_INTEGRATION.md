@@ -1,6 +1,6 @@
 # Drop-In Search Widget Integration
 
-SearchCraft includes a standalone command palette search widget compiled into a single script of under 3KB. It requires zero external dependencies, libraries, or CSS stylesheets.
+SearchCraft includes a standalone command palette search widget compiled into a single script under 3KB. It requires zero external dependencies, libraries, or CSS stylesheets.
 
 ---
 
@@ -13,6 +13,9 @@ Add the script tag to your HTML document right before the closing `</body>` tag:
   src="https://search.yourdomain.com/widget.js"
   data-url="https://search.yourdomain.com"
   data-index="documentation"
+  data-api-key="sc_live_search_..."
+  data-theme="auto"
+  data-lang="en"
   data-placeholder="Search documentation (Cmd+K)..."
   data-accent="#3b82f6"
 ></script>
@@ -29,8 +32,11 @@ All configuration options are specified via HTML data attributes on the `<script
 | Attribute | Type | Default | Description |
 |---|---|---|---|
 | `data-url` | string | `window.location.origin` | The SearchCraft server endpoint. |
-| `data-index` | string | required | Target index name to query against. |
-| `data-placeholder` | string | `"Search..."` | Placeholder text displayed in the search input. |
+| `data-index` | string | `"products"` | Target index name to query against. |
+| `data-api-key` | string | `""` | Scoped public search API key. |
+| `data-theme` | string | `"auto"` | Visual theme: `"auto"` (matches system), `"dark"`, or `"light"`. |
+| `data-lang` | string | `"en"` | Language localization: `"en"`, `"ro"`, `"es"`, `"fr"`, `"de"`. |
+| `data-placeholder` | string | localized | Placeholder text displayed in the search input. |
 | `data-accent` | string | `"#3b82f6"` | Primary accent color for badges, borders, and selection. |
 | `data-shortcut` | string | `"k"` | Character key to pair with Cmd / Ctrl. Set to `"none"` to disable. |
 | `data-limit` | number | `8` | Maximum number of search results displayed in the modal list. |
@@ -38,7 +44,17 @@ All configuration options are specified via HTML data attributes on the `<script
 
 ---
 
-## 3. Triggering the Widget Manually
+## 3. Interactive Features
+
+### Autocomplete Suggestions
+As you type, real-time query suggestions appear below the search bar. Clicking a suggestion pill updates the input and executes the search immediately.
+
+### "Did You Mean?" Typo Correction
+If an interogation produces zero hits, SearchCraft computes the closest vocabulary candidate via Damerau-Levenshtein distance and displays a clickable correction pill.
+
+---
+
+## 4. Triggering the Widget Manually
 
 You can open the search palette from any custom button, link, or menu item by adding the `data-searchcraft-trigger` attribute:
 
@@ -64,24 +80,24 @@ window.SearchCraft.search("keyboard shortcuts");
 
 ---
 
-## 4. Custom Result Selection Handling
+## 5. Custom Result Selection Handling
 
-By default, selecting an item navigates to its `url` property if present in the indexed document. If you want custom behavior (such as internal SPA router navigation), define a custom callback:
+By default, selecting an item navigates to its `url` property if present in the indexed document. If you want custom behavior (such as internal SPA router navigation), define a custom event listener:
 
 ```html
 <script>
   window.addEventListener("searchcraft:select", function(event) {
-    const document = event.detail.document;
-    console.log("Selected document:", document);
+    const doc = event.detail.document;
+    console.log("Selected document:", doc);
     // Custom router navigation example:
-    // router.push(document.path);
+    // router.push(doc.path);
   });
 </script>
 ```
 
 ---
 
-## 5. Keyboard Navigation Support
+## 6. Keyboard Navigation Support
 
 The widget includes built-in keyboard accessibility:
 - `Cmd+K` / `Ctrl+K`: Toggle search modal.
@@ -89,3 +105,4 @@ The widget includes built-in keyboard accessibility:
 - `Arrow Down`: Move focus to the next search result.
 - `Arrow Up`: Move focus to the previous search result.
 - `Enter`: Activate selected item.
+- `/`: Open palette when no input is focused.

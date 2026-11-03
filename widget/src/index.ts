@@ -5,15 +5,79 @@
   }
   (window as any).__SEARCHCRAFT_INITIALIZED__ = true;
 
+  // Localization Dictionary
+  const i18nDict: Record<string, any> = {
+    en: {
+      placeholder: "Search documentation or products (Cmd+K)...",
+      typeToSearch: "Type a query to search across",
+      noResults: "No matching results found for",
+      didYouMean: "Did you mean:",
+      navigate: "navigate",
+      select: "select",
+      close: "close",
+      poweredBy: "Powered by",
+      suggestions: "Suggestions:",
+    },
+    ro: {
+      placeholder: "Căutare rapidă (Cmd+K)...",
+      typeToSearch: "Tastați pentru a căuta în",
+      noResults: "Niciun rezultat găsit pentru",
+      didYouMean: "Ați vrut să căutați:",
+      navigate: "navigare",
+      select: "selectare",
+      close: "închidere",
+      poweredBy: "Propulsat de",
+      suggestions: "Sugestii:",
+    },
+    es: {
+      placeholder: "Buscar en la documentación (Cmd+K)...",
+      typeToSearch: "Escriba una consulta para buscar en",
+      noResults: "No se encontraron resultados para",
+      didYouMean: "¿Quiso decir:",
+      navigate: "navegar",
+      select: "seleccionar",
+      close: "cerrar",
+      poweredBy: "Desarrollado por",
+      suggestions: "Sugerencias:",
+    },
+    fr: {
+      placeholder: "Rechercher des documents (Cmd+K)...",
+      typeToSearch: "Tapez une requête pour rechercher dans",
+      noResults: "Aucun résultat trouvé pour",
+      didYouMean: "Vouliez-vous dire :",
+      navigate: "naviguer",
+      select: "sélectionner",
+      close: "fermer",
+      poweredBy: "Propulsé par",
+      suggestions: "Suggestions :",
+    },
+    de: {
+      placeholder: "Dokumentation durchsuchen (Cmd+K)...",
+      typeToSearch: "Tippen Sie eine Suchanfrage für",
+      noResults: "Keine Ergebnisse gefunden für",
+      didYouMean: "Meinten Sie:",
+      navigate: "navigieren",
+      select: "auswählen",
+      close: "schließen",
+      poweredBy: "Bereitgestellt von",
+      suggestions: "Vorschläge:",
+    },
+  };
+
   // Extract configuration from current script tag
   const currentScript = document.currentScript as HTMLScriptElement | null;
   const baseUrl = (currentScript?.getAttribute("data-url") || window.location.origin).replace(/\/+$/, "");
   const indexName = currentScript?.getAttribute("data-index") || "products";
-  const placeholder = currentScript?.getAttribute("data-placeholder") || "Search (Cmd+K)...";
+  const apiKey = currentScript?.getAttribute("data-api-key") || "";
+  const langKey = (currentScript?.getAttribute("data-lang") || "en").toLowerCase();
+  const theme = (currentScript?.getAttribute("data-theme") || "auto").toLowerCase();
   const accentColor = currentScript?.getAttribute("data-accent") || "#3b82f6";
   const shortcutKey = (currentScript?.getAttribute("data-shortcut") || "k").toLowerCase();
   const limit = parseInt(currentScript?.getAttribute("data-limit") || "8", 10);
   const searchMode = currentScript?.getAttribute("data-mode") || "hybrid";
+
+  const t = i18nDict[langKey] || i18nDict.en;
+  const placeholder = currentScript?.getAttribute("data-placeholder") || t.placeholder;
 
   let isOpen = false;
   let selectedIndex = 0;
@@ -26,7 +90,7 @@
 
   // Create UI Elements
   const overlay = document.createElement("div");
-  overlay.className = "sc-overlay";
+  overlay.className = `sc-overlay sc-theme-${theme}`;
   overlay.setAttribute("role", "dialog");
   overlay.setAttribute("aria-modal", "true");
 
@@ -41,17 +105,19 @@
         <div class="sc-spinner"></div>
         <kbd class="sc-kbd">ESC</kbd>
       </div>
+      <div class="sc-suggestions-bar" style="display: none;"></div>
+      <div class="sc-did-you-mean" style="display: none;"></div>
       <div class="sc-results-container" role="listbox">
-        <div class="sc-empty-state">Type a query to begin searching...</div>
+        <div class="sc-empty-state">${escapeHtml(t.typeToSearch)} ${escapeHtml(indexName)}...</div>
       </div>
       <div class="sc-footer">
         <div class="sc-footer-shortcuts">
-          <span><kbd class="sc-kbd">↑</kbd> <kbd class="sc-kbd">↓</kbd> navigate</span>
-          <span><kbd class="sc-kbd">↵</kbd> select</span>
-          <span><kbd class="sc-kbd">ESC</kbd> close</span>
+          <span><kbd class="sc-kbd">↑</kbd> <kbd class="sc-kbd">↓</kbd> ${escapeHtml(t.navigate)}</span>
+          <span><kbd class="sc-kbd">↵</kbd> ${escapeHtml(t.select)}</span>
+          <span><kbd class="sc-kbd">ESC</kbd> ${escapeHtml(t.close)}</span>
         </div>
         <div class="sc-footer-brand">
-          Powered by <span>SearchCraft</span>
+          ${escapeHtml(t.poweredBy)} <span>SearchCraft</span>
         </div>
       </div>
     </div>
@@ -62,6 +128,8 @@
   const input = overlay.querySelector(".sc-input") as HTMLInputElement;
   const spinner = overlay.querySelector(".sc-spinner") as HTMLElement;
   const resultsContainer = overlay.querySelector(".sc-results-container") as HTMLElement;
+  const suggestionsBar = overlay.querySelector(".sc-suggestions-bar") as HTMLElement;
+  const didYouMeanBar = overlay.querySelector(".sc-did-you-mean") as HTMLElement;
 
   function openModal() {
     if (isOpen) return;
@@ -70,6 +138,8 @@
     input.value = "";
     selectedIndex = 0;
     renderResults([]);
+    suggestionsBar.style.display = "none";
+    didYouMeanBar.style.display = "none";
     setTimeout(() => input.focus(), 30);
   }
 
@@ -97,12 +167,12 @@
     selectedIndex = 0;
 
     if (!input.value.trim()) {
-      resultsContainer.innerHTML = `<div class="sc-empty-state">Type a query to search across ${escapeHtml(indexName)}...</div>`;
+      resultsContainer.innerHTML = `<div class="sc-empty-state">${escapeHtml(t.typeToSearch)} ${escapeHtml(indexName)}...</div>`;
       return;
     }
 
     if (hits.length === 0) {
-      resultsContainer.innerHTML = `<div class="sc-empty-state">No matching results found for "${escapeHtml(input.value)}".</div>`;
+      resultsContainer.innerHTML = `<div class="sc-empty-state">${escapeHtml(t.noResults)} "${escapeHtml(input.value)}".</div>`;
       return;
     }
 
@@ -125,6 +195,32 @@
     }).join("");
   }
 
+  function renderSuggestions(suggestions: string[]) {
+    if (!suggestions || suggestions.length === 0) {
+      suggestionsBar.style.display = "none";
+      return;
+    }
+
+    suggestionsBar.style.display = "flex";
+    suggestionsBar.innerHTML = `
+      <span class="sc-suggestions-label">${escapeHtml(t.suggestions)}</span>
+      ${suggestions.map(s => `<span class="sc-suggestion-pill" data-suggestion="${escapeHtml(s)}">${escapeHtml(s)}</span>`).join("")}
+    `;
+  }
+
+  function renderDidYouMean(candidate: string) {
+    if (!candidate) {
+      didYouMeanBar.style.display = "none";
+      return;
+    }
+
+    didYouMeanBar.style.display = "flex";
+    didYouMeanBar.innerHTML = `
+      <span>${escapeHtml(t.didYouMean)}</span>
+      <button class="sc-did-you-mean-btn" data-correction="${escapeHtml(candidate)}">${escapeHtml(candidate)}</button>
+    `;
+  }
+
   function updateSelection() {
     const items = resultsContainer.querySelectorAll(".sc-result-item");
     items.forEach((item, idx) => {
@@ -145,14 +241,12 @@
     const hit = currentHits[selectedIndex];
     const doc = hit.document || {};
 
-    // Dispatch custom event
     const event = new CustomEvent("searchcraft:select", {
       detail: { hit, document: doc },
       bubbles: true,
     });
     window.dispatchEvent(event);
 
-    // If item contains a url or link attribute, navigate to it
     const url = doc.url || doc.link || doc.href || doc.path;
     closeModal();
     if (url && typeof url === "string") {
@@ -163,6 +257,8 @@
   async function executeSearch(query: string) {
     if (!query.trim()) {
       renderResults([]);
+      suggestionsBar.style.display = "none";
+      didYouMeanBar.style.display = "none";
       spinner.classList.remove("sc-loading");
       return;
     }
@@ -175,9 +271,14 @@
     spinner.classList.add("sc-loading");
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (apiKey) {
+        headers["Authorization"] = `Bearer ${apiKey}`;
+      }
+
       const res = await fetch(`${baseUrl}/api/v1/indexes/${encodeURIComponent(indexName)}/search`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           query: query,
           mode: searchMode,
@@ -193,6 +294,8 @@
 
       const data = await res.json();
       renderResults(data.hits || []);
+      renderSuggestions(data.suggestions || []);
+      renderDidYouMean(data.did_you_mean || "");
     } catch (err: any) {
       if (err.name !== "AbortError") {
         resultsContainer.innerHTML = `<div class="sc-empty-state">Search request failed. Please check network.</div>`;
@@ -202,12 +305,32 @@
     }
   }
 
+  // Click suggestions
+  suggestionsBar.addEventListener("click", (e: MouseEvent) => {
+    const pill = (e.target as HTMLElement).closest("[data-suggestion]") as HTMLElement;
+    if (pill) {
+      const val = pill.getAttribute("data-suggestion") || "";
+      input.value = val;
+      executeSearch(val);
+    }
+  });
+
+  // Click did you mean
+  didYouMeanBar.addEventListener("click", (e: MouseEvent) => {
+    const btn = (e.target as HTMLElement).closest("[data-correction]") as HTMLElement;
+    if (btn) {
+      const val = btn.getAttribute("data-correction") || "";
+      input.value = val;
+      executeSearch(val);
+    }
+  });
+
   // Event Listeners
   input.addEventListener("input", (e: any) => {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       executeSearch(e.target.value);
-    }, 150);
+    }, 140);
   });
 
   input.addEventListener("keydown", (e: KeyboardEvent) => {
@@ -261,7 +384,6 @@
       }
     }
 
-    // Slash trigger (/) when no input is focused
     if (e.key === "/" && !isOpen) {
       const activeEl = document.activeElement;
       const isInput = activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || (activeEl as HTMLElement).isContentEditable);
@@ -272,7 +394,6 @@
     }
   });
 
-  // Listen for trigger elements
   document.addEventListener("click", (e: MouseEvent) => {
     const trigger = (e.target as HTMLElement).closest("[data-searchcraft-trigger]");
     if (trigger) {

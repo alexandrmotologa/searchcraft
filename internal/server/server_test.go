@@ -147,4 +147,74 @@ func TestServerAPI(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("expected widget.js 200, got %d", w.Code)
 	}
+
+	// 8. Test Suggest Endpoint
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/indexes/products/suggest?q=ergo", nil)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected suggest 200, got %d", w.Code)
+	}
+
+	// 9. Test API Keys & Role Enforcement
+	keyPayload := []byte(`{"name": "Public Search Widget Key", "role": "search"}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/keys", bytes.NewReader(keyPayload))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected create key 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var keyResp struct {
+		Key string `json:"key"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &keyResp)
+	searchKey := keyResp.Key
+
+	// Verify Search key CAN search
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/indexes/products/search", bytes.NewReader(searchPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+searchKey)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected search key to succeed searching, got %d", w.Code)
+	}
+
+	// Verify Search key CANNOT mutate documents (returns 403 Forbidden)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/indexes/products/documents", bytes.NewReader(docPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+searchKey)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected search key to be forbidden from mutating docs, got %d", w.Code)
+	}
+
+	// Create Admin key directly in DB for testing
+	adminKey, _, err := srv.db.CreateAPIKey("Admin Key", "admin")
+	if err != nil {
+		t.Fatalf("create admin key: %v", err)
+	}
+
+	// 10. Test Synonyms Endpoint with Admin Key
+	synPayload := []byte(`{"term": "clicker", "synonyms": ["mouse"], "is_two_way": true}`)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/indexes/products/synonyms", bytes.NewReader(synPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+adminKey)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected add synonym 200, got %d", w.Code)
+	}
+
+	// 11. Test Export Endpoint with Admin Key
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/indexes/products/export", nil)
+	req.Header.Set("Authorization", "Bearer "+adminKey)
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected export 200, got %d", w.Code)
+	}
 }

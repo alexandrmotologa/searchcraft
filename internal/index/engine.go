@@ -218,10 +218,13 @@ func (e *Engine) Search(ctx context.Context, indexName string, req storage.Searc
 	var bm25Hits []storage.FTSResult
 	var vectorHits []VectorMatch
 
+	// Load active synonyms for query expansion
+	synMap, _ := e.db.GetSynonymMap(indexName)
+
 	// 1. BM25 Search
 	if mode == "hybrid" || mode == "bm25" {
 		if cleanQuery != "" {
-			ftsResults, _ := ExecuteBM25(e.db, indexName, cleanQuery, candidateLimit)
+			ftsResults, _ := ExecuteBM25(e.db, indexName, cleanQuery, synMap, candidateLimit)
 			bm25Hits = ftsResults
 		}
 	}
@@ -281,13 +284,80 @@ func (e *Engine) Search(ctx context.Context, indexName string, req storage.Searc
 		})
 	}
 
-	// 5. Dynamic Facet Aggregation across matching documents
+	// 5. Inject Pinned Promotions (Merchandising)
+	promotions, _ := e.db.GetMatchingPromotions(indexName, cleanQuery)
+	for _, promo := range promotions {
+		for _, docID := range promo.PinnedDocIDs {
+			// Check if already in hits
+			alreadyPresent := false
+			for _, h := range hits {
+				if h.ID == docID {
+					alreadyPresent = true
+					break
+				}
+			}
+
+			if !alreadyPresent {
+				doc, err := e.db.GetDocument(indexName, docID)
+				if err == nil && doc != nil {
+					promotedHit := storage.SearchHit{
+						ID:          docID,
+						Score:       1.0, // top score for pinned result
+						RRFScore:    0.1,
+						BM25Score:   1.0,
+						VectorScore: 1.0,
+						Document:    doc.Data,
+					}
+					// Insert at promo.Position - 1 (default 0)
+					targetPos := promo.Position - 1
+					if targetPos < 0 {
+						targetPos = 0
+					}
+					if targetPos >= len(hits) {
+						hits = append(hits, promotedHit)
+					} else {
+						hits = append(hits[:targetPos], append([]storage.SearchHit{promotedHit}, hits[targetPos:]...)...)
+					}
+				}
+			}
+		}
+	}
+
+	// 6. Dynamic Facet Aggregation across matching documents
 	var facetResults map[string]map[string]int
 	if len(req.Facets) > 0 {
 		facetResults = facets.AggregateFacets(matchedDocs, req.Facets)
 	}
 
 	total := len(hits)
+
+	// 7. Calculate "Did You Mean" fallback if 0 results
+	var didYouMean string
+	if total == 0 && cleanQuery != "" {
+		vocab, _ := e.db.GetIndexVocabulary(indexName, 100)
+		queryTokens := typo.Tokenize(cleanQuery)
+		if len(queryTokens) > 0 {
+			targetWord := queryTokens[len(queryTokens)-1]
+			bestDist := 99
+			bestCandidate := ""
+			for _, word := range vocab {
+				if word == targetWord {
+					continue
+				}
+				dist := typo.DamerauLevenshtein(targetWord, word)
+				if dist <= typo.MaxAllowedDistance(len(targetWord)) && dist < bestDist {
+					bestDist = dist
+					bestCandidate = word
+				}
+			}
+			if bestCandidate != "" {
+				didYouMean = strings.Replace(cleanQuery, targetWord, bestCandidate, 1)
+			}
+		}
+	}
+
+	// Suggestions
+	suggestions, _ := e.Suggest(ctx, indexName, cleanQuery, 4)
 
 	// Apply pagination (offset & limit)
 	offset := req.Offset
@@ -307,7 +377,7 @@ func (e *Engine) Search(ctx context.Context, indexName string, req storage.Searc
 	duration := time.Since(startTime)
 	tookMs := float64(duration.Microseconds()) / 1000.0
 
-	// 6. Record query analytics asynchronously
+	// 8. Record query analytics asynchronously
 	go e.db.RecordSearch(storage.SearchLog{
 		IndexName: indexName,
 		Query:     req.Query,
@@ -317,13 +387,61 @@ func (e *Engine) Search(ctx context.Context, indexName string, req storage.Searc
 	})
 
 	return &storage.SearchResponse{
-		Hits:   hits,
-		Total:  total,
-		TookMs: tookMs,
-		Query:  req.Query,
-		Mode:   mode,
-		Facets: facetResults,
+		Hits:        hits,
+		Total:       total,
+		TookMs:      tookMs,
+		Query:       req.Query,
+		Mode:        mode,
+		Facets:      facetResults,
+		DidYouMean:  didYouMean,
+		Suggestions: suggestions,
 	}, nil
+}
+
+// Suggest returns autocomplete term completions matching prefix from vocabulary and popular queries.
+func (e *Engine) Suggest(_ context.Context, indexName, prefix string, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	cleanPrefix := strings.ToLower(strings.TrimSpace(prefix))
+	if cleanPrefix == "" {
+		return nil, nil
+	}
+
+	vocab, err := e.db.GetIndexVocabulary(indexName, 100)
+	if err != nil {
+		return nil, err
+	}
+
+	popular, _ := e.db.GetPopularQueries(50)
+
+	var suggestions []string
+	seen := make(map[string]bool)
+
+	// Check popular queries first
+	for _, p := range popular {
+		low := strings.ToLower(p.Query)
+		if strings.HasPrefix(low, cleanPrefix) && !seen[low] {
+			seen[low] = true
+			suggestions = append(suggestions, p.Query)
+			if len(suggestions) >= limit {
+				return suggestions, nil
+			}
+		}
+	}
+
+	// Check index vocabulary terms
+	for _, term := range vocab {
+		if strings.HasPrefix(term, cleanPrefix) && !seen[term] {
+			seen[term] = true
+			suggestions = append(suggestions, term)
+			if len(suggestions) >= limit {
+				break
+			}
+		}
+	}
+
+	return suggestions, nil
 }
 
 // buildEmbeddableText concatenates representative textual attributes for embedding vector generation.

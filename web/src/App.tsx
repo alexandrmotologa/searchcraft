@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Navbar } from './components/Navbar';
+import { Navbar, NavTab } from './components/Navbar';
 import { SearchSandbox } from './components/SearchSandbox';
 import { DocumentManager } from './components/DocumentManager';
+import { SynonymsManager } from './components/SynonymsManager';
+import { CrawlerManager } from './components/CrawlerManager';
 import { QueryAnalytics } from './components/QueryAnalytics';
+import { KeysManager } from './components/KeysManager';
 import { WidgetEmbed } from './components/WidgetEmbed';
 import { fetchHealth, fetchIndexes, createIndex, upsertDocuments } from './api/client';
 import { IndexMeta, SystemHealth } from './types/search';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'sandbox' | 'documents' | 'analytics' | 'widget'>('sandbox');
+  const [activeTab, setActiveTab] = useState<NavTab>('sandbox');
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [indexes, setIndexes] = useState<IndexMeta[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<string>('products');
@@ -19,7 +22,6 @@ export const App: React.FC = () => {
       setHealth(h);
 
       let idxList = await fetchIndexes();
-      // If no indexes exist yet, automatically initialize default products index with rich demo records
       if (idxList.length === 0) {
         await createIndex('products', { title: 3.0, description: 1.0, tags: 2.0 }, 'hybrid');
         const sampleProducts = [
@@ -130,14 +132,32 @@ export const App: React.FC = () => {
           />
         )}
 
+        {activeTab === 'synonyms' && (
+          <SynonymsManager
+            indexes={indexes}
+            selectedIndex={selectedIndex}
+            onSelectIndex={setSelectedIndex}
+          />
+        )}
+
+        {activeTab === 'crawler' && (
+          <CrawlerManager
+            indexes={indexes}
+            selectedIndex={selectedIndex}
+            onSelectIndex={setSelectedIndex}
+            onRefreshIndexes={refreshIndexes}
+          />
+        )}
+
         {activeTab === 'analytics' && <QueryAnalytics />}
+
+        {activeTab === 'keys' && <KeysManager />}
 
         {activeTab === 'widget' && (
           <WidgetEmbed indexes={indexes} selectedIndex={selectedIndex} />
         )}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-border/60 py-6 text-center text-xs text-slate-500">
         <p>SearchCraft &bull; Single-Binary Instant Hybrid Search Engine (&lt; 40MB RAM)</p>
       </footer>

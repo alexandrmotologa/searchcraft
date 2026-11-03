@@ -55,15 +55,49 @@ func GenerateHighlights(docData map[string]any, queryTokens []string) map[string
 	return highlights
 }
 
+// BuildFTSQueryWithSynonyms constructs an FTS5 MATCH expression expanding query terms with active synonyms.
+func BuildFTSQueryWithSynonyms(rawQuery string, synMap map[string][]string, prefixLast bool) string {
+	tokens := typo.Tokenize(rawQuery)
+	if len(tokens) == 0 {
+		return ""
+	}
+
+	var termClauses []string
+	for i, token := range tokens {
+		synonyms := synMap[token]
+		if len(synonyms) == 0 {
+			if prefixLast && i == len(tokens)-1 && len(token) >= 2 {
+				termClauses = append(termClauses, `"`+token+`"*`)
+			} else {
+				termClauses = append(termClauses, `"`+token+`"`)
+			}
+			continue
+		}
+
+		// Expand term with synonyms: ("term" OR "synonym1" OR "synonym2")
+		var orList []string
+		orList = append(orList, `"`+token+`"`)
+		for _, s := range synonyms {
+			cleanSyn := typo.CleanQuery(s)
+			if cleanSyn != "" {
+				orList = append(orList, `"`+cleanSyn+`"`)
+			}
+		}
+		termClauses = append(termClauses, "("+strings.Join(orList, " OR ")+")")
+	}
+
+	return strings.Join(termClauses, " AND ")
+}
+
 // ExecuteBM25 runs full-text search against the SQLite FTS5 table with fallback on typos.
-func ExecuteBM25(db *storage.DB, indexName, rawQuery string, limit int) ([]storage.FTSResult, error) {
+func ExecuteBM25(db *storage.DB, indexName, rawQuery string, synMap map[string][]string, limit int) ([]storage.FTSResult, error) {
 	tokens := typo.Tokenize(rawQuery)
 	if len(tokens) == 0 {
 		return nil, nil
 	}
 
-	// 1. Try exact & prefix query first: "word1" AND "word2"*
-	ftsQuery := typo.BuildFTSQuery(rawQuery, true)
+	// 1. Try exact & prefix query with synonyms:
+	ftsQuery := BuildFTSQueryWithSynonyms(rawQuery, synMap, true)
 	results, err := db.QueryFTS(indexName, ftsQuery, limit)
 	if err == nil && len(results) > 0 {
 		return normalizeBM25Scores(results), nil

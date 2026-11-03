@@ -179,3 +179,91 @@ func TestSQLiteStorage(t *testing.T) {
 		t.Errorf("expected error getting deleted index, got nil")
 	}
 }
+
+func TestFeaturesManagement(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sc_features_test_*")
+	if err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test.db")
+	db, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	// 1. API Keys
+	rawKey, keyInfo, err := db.CreateAPIKey("Test Search Key", "search")
+	if err != nil {
+		t.Fatalf("create api key: %v", err)
+	}
+	if keyInfo.Role != "search" {
+		t.Errorf("expected search role, got %s", keyInfo.Role)
+	}
+
+	validKey, err := db.ValidateAPIKey(rawKey)
+	if err != nil {
+		t.Fatalf("validate key: %v", err)
+	}
+	if validKey.Name != "Test Search Key" {
+		t.Errorf("expected name Test Search Key, got %s", validKey.Name)
+	}
+
+	keys, err := db.ListAPIKeys()
+	if err != nil || len(keys) != 1 {
+		t.Fatalf("expected 1 key, got %d", len(keys))
+	}
+
+	// 2. Synonyms
+	err = db.AddSynonym(SynonymRule{
+		IndexName: "products",
+		Term:      "laptop",
+		Synonyms:  []string{"notebook", "macbook"},
+		IsTwoWay:  true,
+	})
+	if err != nil {
+		t.Fatalf("add synonym: %v", err)
+	}
+
+	synMap, err := db.GetSynonymMap("products")
+	if err != nil {
+		t.Fatalf("get synonym map: %v", err)
+	}
+	if len(synMap["laptop"]) != 2 {
+		t.Errorf("expected 2 synonyms for laptop, got %d", len(synMap["laptop"]))
+	}
+	if len(synMap["notebook"]) == 0 {
+		t.Errorf("expected two-way synonym for notebook")
+	}
+
+	// 3. Promotions
+	err = db.AddPromotion(PromotionRule{
+		IndexName:    "products",
+		QueryPattern: "pricing",
+		PinnedDocIDs: []string{"doc_pricing_plan"},
+		Position:     1,
+	})
+	if err != nil {
+		t.Fatalf("add promotion: %v", err)
+	}
+
+	matching, err := db.GetMatchingPromotions("products", "view pricing plans")
+	if err != nil || len(matching) == 0 {
+		t.Fatalf("expected matching promotion for 'pricing', got %d", len(matching))
+	}
+	if matching[0].PinnedDocIDs[0] != "doc_pricing_plan" {
+		t.Errorf("expected doc_pricing_plan, got %s", matching[0].PinnedDocIDs[0])
+	}
+
+	// 4. Backup & Snapshot
+	backupPath := filepath.Join(tmpDir, "backup.db")
+	err = db.BackupTo(backupPath)
+	if err != nil {
+		t.Fatalf("backup to path: %v", err)
+	}
+	if _, err := os.Stat(backupPath); err != nil {
+		t.Errorf("expected backup file to exist: %v", err)
+	}
+}
