@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #090d16;
+    color: #f1f5f9;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  mark {
+    background-color: rgba(59, 130, 246, 0.25);
+    color: #93c5fd;
+    font-weight: 600;
+    border-radius: 2px;
+    padding: 0 3px;
+  }
+}

@@ -1,8 +1,8 @@
 # Binaries
 bin/
-dist/
-searchcraft
-searchcraft.exe
+/dist/
+/searchcraft
+/searchcraft.exe
 *.exe
 *.exe~
 *.dll
@@ -28,9 +28,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Build outputs
+# Frontend build outputs (intermediate)
 widget/dist/
 web/dist/
+*.tsbuildinfo
 
 # OS files
 .DS_Store

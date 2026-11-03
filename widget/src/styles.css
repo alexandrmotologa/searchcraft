@@ -1,0 +1,223 @@
+:root {
+  --sc-accent: #3b82f6;
+  --sc-accent-glow: rgba(59, 130, 246, 0.15);
+}
+
+.sc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh 1rem 2rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-out;
+  box-sizing: border-box;
+}
+
+.sc-overlay.sc-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sc-modal {
+  width: 100%;
+  max-width: 620px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 14px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(-8px) scale(0.98);
+  transition: transform 0.15s ease-out;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  color: #f8fafc;
+}
+
+.sc-overlay.sc-open .sc-modal {
+  transform: translateY(0) scale(1);
+}
+
+.sc-search-bar {
+  display: flex;
+  align-items: center;
+  padding: 0.875rem 1.125rem;
+  border-bottom: 1px solid #1e293b;
+  gap: 0.75rem;
+  background: #0f172a;
+}
+
+.sc-search-icon {
+  width: 20px;
+  height: 20px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.sc-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 1.05rem;
+  color: #f8fafc;
+  font-family: inherit;
+}
+
+.sc-input::placeholder {
+  color: #64748b;
+}
+
+.sc-kbd {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.sc-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #334155;
+  border-top-color: var(--sc-accent);
+  border-radius: 50%;
+  animation: sc-spin 0.6s linear infinite;
+  display: none;
+}
+
+.sc-spinner.sc-loading {
+  display: block;
+}
+
+@keyframes sc-spin {
+  to { transform: rotate(360deg); }
+}
+
+.sc-results-container {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+
+.sc-results-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sc-results-container::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+
+.sc-result-item {
+  padding: 0.75rem 0.875rem;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  transition: background 0.1s ease, border-color 0.1s ease;
+  border: 1px solid transparent;
+  text-decoration: none;
+  color: inherit;
+}
+
+.sc-result-item:hover,
+.sc-result-item.sc-selected {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.sc-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.sc-result-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  line-height: 1.3;
+}
+
+.sc-result-title mark,
+.sc-result-desc mark {
+  background: var(--sc-accent-glow);
+  color: #60a5fa;
+  font-weight: 700;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.sc-badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  white-space: nowrap;
+}
+
+.sc-result-desc {
+  font-size: 0.825rem;
+  color: #94a3b8;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.sc-empty-state {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.sc-footer {
+  padding: 0.625rem 1rem;
+  background: #0b1120;
+  border-top: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.sc-footer-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sc-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #64748b;
+  text-decoration: none;
+}
+
+.sc-footer-brand span {
+  font-weight: 600;
+  color: #94a3b8;
+}

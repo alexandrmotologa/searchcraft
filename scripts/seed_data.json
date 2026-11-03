@@ -1,0 +1,112 @@
+[
+  {
+    "id": "kb_q1_pro",
+    "title": "Keychron Q1 Pro Wireless Custom Mechanical Keyboard",
+    "description": "Premium 75% layout QMK/VIA wireless custom mechanical keyboard with CNC machined aluminum body, double-gasket design, and hot-swappable switches.",
+    "category": "Keyboards",
+    "brand": "Keychron",
+    "price": 199.00,
+    "rating": 4.9,
+    "in_stock": true,
+    "tags": ["wireless", "mechanical", "aluminum", "qmk", "custom", "bluetooth"]
+  },
+  {
+    "id": "kb_gmmk_pro",
+    "title": "Glorious GMMK Pro 75% Gasket-Mounted Mechanical Keyboard",
+    "description": "Ultra-premium 75% layout modular mechanical keyboard with aluminum top frame, rotary media encoder, and 16.8M per-key RGB backlighting.",
+    "category": "Keyboards",
+    "brand": "Glorious",
+    "price": 169.99,
+    "rating": 4.7,
+    "in_stock": true,
+    "tags": ["mechanical", "gasket", "rgb", "modular", "custom"]
+  },
+  {
+    "id": "ms_mx_master_3s",
+    "title": "Logitech MX Master 3S Wireless Performance Mouse",
+    "description": "Ergonomic wireless mouse with quiet clicks, 8K DPI track-on-glass sensor, and MagSpeed electromagnetic scrolling wheel.",
+    "category": "Mice",
+    "brand": "Logitech",
+    "price": 99.99,
+    "rating": 4.9,
+    "in_stock": true,
+    "tags": ["wireless", "ergonomic", "office", "bluetooth", "quiet"]
+  },
+  {
+    "id": "ms_deathadder_v3",
+    "title": "Razer DeathAdder V3 Pro Ultra-Lightweight Wireless Mouse",
+    "description": "63g ultra-lightweight ergonomic esports mouse with Focus Pro 30K optical sensor, Gen-3 optical switches, and 90-hour battery life.",
+    "category": "Mice",
+    "brand": "Razer",
+    "price": 149.99,
+    "rating": 4.8,
+    "in_stock": true,
+    "tags": ["wireless", "gaming", "ultralight", "esports"]
+  },
+  {
+    "id": "doc_sqlite_fts5",
+    "title": "Full-Text Search with SQLite FTS5 in Go",
+    "description": "Guide to configuring virtual tables, BM25 ranking, trigram tokenizers, and porter stemmers in embedded SQLite applications.",
+    "category": "Documentation",
+    "brand": "SearchCraft",
+    "price": 0.00,
+    "rating": 5.0,
+    "in_stock": true,
+    "tags": ["sqlite", "fts5", "golang", "bm25", "database"]
+  },
+  {
+    "id": "doc_rrf_ranking",
+    "title": "Reciprocal Rank Fusion (RRF) for Hybrid Search",
+    "description": "Mathematical explanation of Reciprocal Rank Fusion, smoothing parameter k=60, and merging disparate score distributions.",
+    "category": "Documentation",
+    "brand": "SearchCraft",
+    "price": 0.00,
+    "rating": 5.0,
+    "in_stock": true,
+    "tags": ["rrf", "hybrid", "vector", "bm25", "search"]
+  },
+  {
+    "id": "doc_widget_guide",
+    "title": "Embedding the 2KB Cmd+K Search Widget",
+    "description": "Step-by-step tutorial on embedding the standalone command palette into static blogs, Next.js apps, and documentation portals.",
+    "category": "Documentation",
+    "brand": "SearchCraft",
+    "price": 0.00,
+    "rating": 4.9,
+    "in_stock": true,
+    "tags": ["widget", "javascript", "cmdk", "frontend", "integration"]
+  },
+  {
+    "id": "ms_lift_vertical",
+    "title": "Logitech Lift Vertical Ergonomic Mouse",
+    "description": "Great for small to medium hands, 57-degree vertical angle designed to relieve wrist pressure with quiet click buttons.",
+    "category": "Mice",
+    "brand": "Logitech",
+    "price": 69.99,
+    "rating": 4.6,
+    "in_stock": true,
+    "tags": ["ergonomic", "vertical", "wireless", "office"]
+  },
+  {
+    "id": "kb_ducky_one3",
+    "title": "Ducky One 3 TKL RGB Mechanical Keyboard",
+    "description": "Tenkeyless mechanical keyboard featuring QUACK mechanics, genuine Cherry MX switches, and dual-layer sound dampening silicone.",
+    "category": "Keyboards",
+    "brand": "Ducky",
+    "price": 129.00,
+    "rating": 4.7,
+    "in_stock": false,
+    "tags": ["mechanical", "rgb", "tkl", "cherry-mx"]
+  },
+  {
+    "id": "doc_damerau_levenshtein",
+    "title": "Damerau-Levenshtein Typo Tolerance Algorithm",
+    "description": "Implementation details of string edit distance allowing insertions, deletions, substitutions, and adjacent transpositions.",
+    "category": "Documentation",
+    "brand": "SearchCraft",
+    "price": 0.00,
+    "rating": 4.8,
+    "in_stock": true,
+    "tags": ["typo", "levenshtein", "algorithms", "fuzzy"]
+  }
+]
